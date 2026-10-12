@@ -1,0 +1,6 @@
+{
+  "name": "Tatari Furniture",
+  "description": "Premium furniture store in Jos, Plateau State, Nigeria offering exquisite living room, bedroom, and custom furniture.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
