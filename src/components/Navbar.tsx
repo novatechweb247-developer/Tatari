@@ -24,9 +24,6 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPath, onNavigate }) => {
     { name: 'Home', path: '/' },
     { name: 'About', path: '/about' },
     { name: 'Collections', path: '/collections' },
-    { name: 'Living Room', path: '/living-room' },
-    { name: 'Bedroom', path: '/bedroom' },
-    { name: 'Custom Furniture', path: '/custom-furniture' },
     { name: 'Gallery', path: '/gallery' },
     { name: 'Contact', path: '/contact' },
   ];

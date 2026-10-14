@@ -60,8 +60,6 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
                 { name: 'Home', path: '/' },
                 { name: 'About', path: '/about' },
                 { name: 'Collections', path: '/collections' },
-                { name: 'Living Room', path: '/living-room' },
-                { name: 'Bedroom', path: '/bedroom' },
               ].map((item) => (
                 <li key={item.path}>
                   <a
@@ -79,11 +77,10 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
           {/* More Links */}
           <div>
             <h4 className="font-serif text-lg font-medium text-[#C9A45C] tracking-wide mb-6 uppercase">
-              Showroom & Custom
+              Explore
             </h4>
             <ul className="space-y-3 text-sm text-[#D8CEC0]">
               {[
-                { name: 'Custom Furniture', path: '/custom-furniture' },
                 { name: 'Gallery', path: '/gallery' },
                 { name: 'Contact Us', path: '/contact' },
               ].map((item) => (
