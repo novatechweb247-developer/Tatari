@@ -148,7 +148,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                   if (target.startsWith('/')) handleNav(e, target);
                 }}
                 target={(heroSlides[currentSlide].button_url || '/collections').startsWith('/') ? undefined : '_blank'}
-                rel={(heroSlides[currentSlide].button_url || '/collections').startsWith('/') ? undefined : 'noopener noreferrer'}}
+                rel={(heroSlides[currentSlide].button_url || '/collections').startsWith('/') ? undefined : 'noopener noreferrer'}
                 className="w-full sm:w-auto inline-flex items-center justify-center rounded-full bg-[#C9A45C] hover:bg-[#DFC27A] text-[#1C1511] font-medium text-sm tracking-wider uppercase px-8 py-4 transition-all shadow-xl hover:scale-105"
               >
                 {heroSlides[currentSlide].button_text || 'Explore Collections'}
