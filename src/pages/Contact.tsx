@@ -317,7 +317,7 @@ export const Contact: React.FC = () => {
                   className="w-full inline-flex items-center justify-center rounded-full bg-[#1C1511] hover:bg-[#3A271C] text-[#F6F1E8] font-medium text-xs tracking-wider uppercase py-4 transition-colors shadow-lg"
                 >
                   <Send className="w-4 h-4 mr-2 text-[#C9A45C]" />
-                  Send Enquiry
+                  {saving ? "Sending..." : "Send Enquiry"}
                 </button>
               </form>
             )}
