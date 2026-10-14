@@ -109,7 +109,7 @@ export const Admin: React.FC<{ onExit: () => void }> = ({ onExit }) => {
     finally { setBusy(false); }
   };
 
-  const uploadImage = async (file: File | undefined, target: { kind: 'editorial' } | { kind: 'hero'; slideNumber: number }) => {
+  const uploadImage = async (file: File | undefined, target: { kind: 'editorial' } | { kind: 'hero'; slideNumber: number } | { kind: 'product'; index: number } | { kind: 'gallery'; index: number }) => {
     if (!file || !supabase) return;
     if (!file.type.startsWith('image/')) { setError('Choose an image file.'); return; }
     if (file.size > 10 * 1024 * 1024) { setError('Image must be 10 MB or smaller.'); return; }
@@ -122,6 +122,8 @@ export const Admin: React.FC<{ onExit: () => void }> = ({ onExit }) => {
       const url = data.publicUrl;
       if (target.kind === 'editorial' && settings) setSettings(prev => prev ? { ...prev, editorial_image_url: url } : prev);
       else if (target.kind === 'hero') setSlides(prev => prev.map(s => s.slide_number === target.slideNumber ? { ...s, image_url: url } : s));
+      else if (target.kind === 'product') setProductRows(prev => prev.map((row, index) => index === target.index ? { ...row, image_url: url } : row));
+      else if (target.kind === 'gallery') setGalleryRows(prev => prev.map((row, index) => index === target.index ? { ...row, image_url: url } : row));
     }, 'Image uploaded to persistent media storage. Save your content changes next.');
   };
 
@@ -149,7 +151,7 @@ export const Admin: React.FC<{ onExit: () => void }> = ({ onExit }) => {
     if (!supabase) return;
     const values = { name: item.name, category: item.category, category_label: item.category_label, image_url: item.image_url, description: item.description, features: item.features || [], dimensions: item.dimensions || '', materials: item.materials || '' };
     const payload = { draft_data: values, ...(publish ? { ...values, is_published: true } : {}), updated_at: new Date().toISOString() };
-    const query = item.id ? supabase.from('products').update(payload).eq('id', item.id) : supabase.from('products').insert({ ...payload, sort_order: productRows.length });
+    const query = item.id ? supabase.from('products').update(payload).eq('id', item.id) : supabase.from('products').insert({ ...values, ...payload, is_published: publish, sort_order: productRows.length });
     const { error: saveError } = await query;
     if (saveError) throw saveError;
     await loadData();
@@ -159,7 +161,7 @@ export const Admin: React.FC<{ onExit: () => void }> = ({ onExit }) => {
     if (!supabase) return;
     const values = { title: item.title, category: item.category, image_url: item.image_url, description: item.description };
     const payload = { draft_data: values, ...(publish ? { ...values, is_published: true } : {}), updated_at: new Date().toISOString() };
-    const query = item.id ? supabase.from('gallery_items').update(payload).eq('id', item.id) : supabase.from('gallery_items').insert({ ...payload, sort_order: galleryRows.length });
+    const query = item.id ? supabase.from('gallery_items').update(payload).eq('id', item.id) : supabase.from('gallery_items').insert({ ...values, ...payload, is_published: publish, sort_order: galleryRows.length });
     const { error: saveError } = await query;
     if (saveError) throw saveError;
     await loadData();
@@ -226,7 +228,7 @@ export const Admin: React.FC<{ onExit: () => void }> = ({ onExit }) => {
               {field('Product name',item.name,v=>setProductRows(prev=>prev.map((r,i)=>i===index?{...r,name:v}:r)))}
               <label><span className={labelClass}>Category</span><select className={inputClass} value={item.category} onChange={e=>setProductRows(prev=>prev.map((r,i)=>i===index?{...r,category:e.target.value,category_label:({'living-room':'Living Room',bedroom:'Bedroom',custom:'Custom Furniture',other:'Other Furniture'} as Record<string,string>)[e.target.value]}:r))}><option value="living-room">Living Room</option><option value="bedroom">Bedroom</option><option value="custom">Custom Furniture</option><option value="other">Other Furniture</option></select></label>
               {field('Category label',item.category_label,v=>setProductRows(prev=>prev.map((r,i)=>i===index?{...r,category_label:v}:r)))}
-              {field('Image URL',item.image_url,v=>setProductRows(prev=>prev.map((r,i)=>i===index?{...r,image_url:v}:r)))}
+              <div>{field('Image URL',item.image_url,v=>setProductRows(prev=>prev.map((r,i)=>i===index?{...r,image_url:v}:r)))}<label className="mt-2 block text-xs text-[#6B5546]">Upload product image<input type="file" accept="image/*" className="mt-2 block w-full text-sm" onChange={e=>uploadImage(e.target.files?.[0],{kind:'product',index})}/></label></div>
               <div className="sm:col-span-2">{field('Description',item.description,v=>setProductRows(prev=>prev.map((r,i)=>i===index?{...r,description:v}:r)))}</div>
               {field('Materials',item.materials,v=>setProductRows(prev=>prev.map((r,i)=>i===index?{...r,materials:v}:r)))}
               {field('Dimensions',item.dimensions,v=>setProductRows(prev=>prev.map((r,i)=>i===index?{...r,dimensions:v}:r)))}
@@ -238,7 +240,7 @@ export const Admin: React.FC<{ onExit: () => void }> = ({ onExit }) => {
             <div className="space-y-5">{galleryRows.map((item,index)=><article key={item.id || 'new-'+index} className="rounded-xl border border-[#D8CEC0] p-4"><div className="grid gap-4 sm:grid-cols-2">
               {field('Title',item.title,v=>setGalleryRows(prev=>prev.map((r,i)=>i===index?{...r,title:v}:r)))}
               {field('Category',item.category,v=>setGalleryRows(prev=>prev.map((r,i)=>i===index?{...r,category:v}:r)))}
-              {field('Image URL',item.image_url,v=>setGalleryRows(prev=>prev.map((r,i)=>i===index?{...r,image_url:v}:r)))}
+              <div>{field('Image URL',item.image_url,v=>setGalleryRows(prev=>prev.map((r,i)=>i===index?{...r,image_url:v}:r)))}<label className="mt-2 block text-xs text-[#6B5546]">Upload gallery image<input type="file" accept="image/*" className="mt-2 block w-full text-sm" onChange={e=>uploadImage(e.target.files?.[0],{kind:'gallery',index})}/></label></div>
               <div className="sm:col-span-2">{field('Description',item.description,v=>setGalleryRows(prev=>prev.map((r,i)=>i===index?{...r,description:v}:r)))}</div>
             </div><div className="mt-4 flex flex-wrap gap-2"><button disabled={busy} onClick={()=>runSave(()=>saveGalleryItem(item,false),'Gallery draft saved.')} className="rounded-full border border-[#D8CEC0] px-4 py-2 text-xs">Save draft</button><button disabled={busy} onClick={()=>runSave(()=>saveGalleryItem(item,true),'Gallery item published.')} className="rounded-full bg-[#1C1511] px-4 py-2 text-xs text-white">Publish</button>{item.id&&<button disabled={busy} onClick={()=>runSave(()=>deleteGalleryItem(item),'Gallery item deleted.')} className="rounded-full border border-red-200 px-4 py-2 text-xs text-red-700">Delete</button>}</div></article>)}</div>
           </section>}
