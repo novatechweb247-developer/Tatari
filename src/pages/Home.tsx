@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ChevronLeft, ChevronRight, ArrowRight, ShieldCheck, Sparkles, MapPin } from 'lucide-react';
 import { HERO_SLIDES, PRODUCTS, BUSINESS_INFO } from '../data';
 import { Product } from '../types';
+import { supabase } from '../lib/supabase';
 
 interface HomeProps {
   onNavigate: (path: string) => void;
@@ -10,20 +11,34 @@ interface HomeProps {
 
 export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [heroSlides, setHeroSlides] = useState(HERO_SLIDES);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadPublishedHero = async () => {
+      if (!supabase) return;
+      const { data, error } = await supabase.from('hero_slides').select('slide_number,title,subtitle,badge,image_url,is_published').eq('is_published', true).order('slide_number');
+      if (!cancelled && !error && data?.length === 3 && data.every(row => row.title && row.image_url)) {
+        setHeroSlides(data.map(row => ({ id: row.slide_number, title: row.title, subtitle: row.subtitle, badge: row.badge, image: row.image_url })));
+      }
+    };
+    void loadPublishedHero();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % HERO_SLIDES.length);
+      setCurrentSlide((prev) => (prev + 1) % heroSlides.length);
     }, 6000);
     return () => clearInterval(interval);
-  }, []);
+  }, [heroSlides.length]);
 
   const nextSlide = () => {
-    setCurrentSlide((prev) => (prev + 1) % HERO_SLIDES.length);
+    setCurrentSlide((prev) => (prev + 1) % heroSlides.length);
   };
 
   const prevSlide = () => {
-    setCurrentSlide((prev) => (prev - 1 + HERO_SLIDES.length) % HERO_SLIDES.length);
+    setCurrentSlide((prev) => (prev - 1 + heroSlides.length) % heroSlides.length);
   };
 
   const handleNav = (e: React.MouseEvent, path: string) => {
@@ -49,7 +64,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           >
             <div className="absolute inset-0 bg-gradient-to-t from-[#1C1511] via-[#1C1511]/40 to-[#1C1511]/60 z-10" />
             <img
-              src={HERO_SLIDES[currentSlide].image}
+              src={heroSlides[currentSlide].image}
               alt={HERO_SLIDES[currentSlide].title}
               className="w-full h-full object-cover object-center"
               referrerPolicy="no-referrer"
@@ -126,7 +141,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           </button>
 
           <div className="flex items-center space-x-3">
-            {HERO_SLIDES.map((_, idx) => (
+            {heroSlides.map((_, idx) => (
               <button
                 key={idx}
                 onClick={() => setCurrentSlide(idx)}
