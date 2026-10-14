@@ -122,11 +122,11 @@ export const Admin: React.FC<{ onExit: () => void }> = ({ onExit }) => {
     finally { setBusy(false); setBusyAction(''); setLoading(false); }
   };
 
-  const runSave = async (task: () => Promise<void>, message: string, action = 'Saving changes') => {
+  const runSave = async (task: () => Promise<void | boolean>, message: string, action = 'Saving changes') => {
     setBusy(true); setBusyAction(action); setError(''); setNotice('');
     try {
-      await task();
-      setNotice(message);
+      const result = await task();
+      setNotice(result === false ? 'Cancelled. No changes were made.' : message);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'The operation failed. The change was not confirmed as saved.');
     } finally { setBusy(false); setBusyAction(''); }
@@ -207,7 +207,7 @@ export const Admin: React.FC<{ onExit: () => void }> = ({ onExit }) => {
 
   const deleteProduct = async (item: ProductRow) => {
     if (!supabase || !item.id) throw new Error('Save this product before deleting it.');
-    if (!window.confirm('Delete “' + item.name + '”? This cannot be undone.')) return;
+    if (!window.confirm('Delete “' + item.name + '”? This cannot be undone.')) return false;
     const { data, error: deleteError } = await supabase.from('products').delete().eq('id', item.id).select('id').maybeSingle();
     if (deleteError) throw deleteError;
     if (!data) throw new Error('No product was deleted. Check administrator permissions and try again.');
@@ -216,7 +216,7 @@ export const Admin: React.FC<{ onExit: () => void }> = ({ onExit }) => {
 
   const deleteGalleryItem = async (item: GalleryRow) => {
     if (!supabase || !item.id) throw new Error('Save this gallery item before deleting it.');
-    if (!window.confirm('Delete “' + item.title + '”? This cannot be undone.')) return;
+    if (!window.confirm('Delete “' + item.title + '”? This cannot be undone.')) return false;
     const { data, error: deleteError } = await supabase.from('gallery_items').delete().eq('id', item.id).select('id').maybeSingle();
     if (deleteError) throw deleteError;
     if (!data) throw new Error('No gallery item was deleted. Check administrator permissions and try again.');
