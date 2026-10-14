@@ -3,27 +3,74 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ChevronLeft, ChevronRight, ArrowRight, ShieldCheck, Sparkles, MapPin } from 'lucide-react';
 import { HERO_SLIDES, PRODUCTS, BUSINESS_INFO } from '../data';
 import { Product } from '../types';
+import { supabase } from '../lib/supabase';
 
 interface HomeProps {
   onNavigate: (path: string) => void;
 }
 
+type HomeHeroSlide = {
+  id: number;
+  title: string;
+  subtitle: string;
+  badge: string;
+  image: string;
+  button_text?: string;
+  button_url?: string;
+};
+
 export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [heroSlides, setHeroSlides] = useState<HomeHeroSlide[]>(HERO_SLIDES);
+  const [featuredProducts, setFeaturedProducts] = useState<Product[]>(PRODUCTS.slice(0, 4));
+  const [editorialImage, setEditorialImage] = useState('');
+  const [businessAddress, setBusinessAddress] = useState(BUSINESS_INFO.address);
+  const [whatsappUrl, setWhatsappUrl] = useState(BUSINESS_INFO.whatsappUrl);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadPublishedHero = async () => {
+      if (!supabase) return;
+      const { data, error } = await supabase.from('hero_slides').select('slide_number,title,subtitle,badge,image_url,button_text,button_url,is_published').eq('is_published', true).order('slide_number');
+      if (!cancelled && !error && data?.length === 3 && data.every(row => row.title && row.image_url)) {
+        setHeroSlides(data.map(row => ({ id: row.slide_number, title: row.title, subtitle: row.subtitle, badge: row.badge, image: row.image_url, button_text: row.button_text, button_url: row.button_url })));
+      }
+    };
+    void loadPublishedHero();
+    const loadPublishedSettings = async () => {
+      const { data, error } = await supabase.from('site_settings').select('address,whatsapp_url,editorial_image_url,is_published').eq('id', 'main').eq('is_published', true).maybeSingle();
+      if (!cancelled && !error && data) {
+        if (data.editorial_image_url) setEditorialImage(data.editorial_image_url);
+        if (data.address) setBusinessAddress(data.address);
+        if (data.whatsapp_url) setWhatsappUrl(data.whatsapp_url);
+      }
+    };
+    const loadFeaturedProducts = async () => {
+      const { data, error } = await supabase.from('products').select('id,name,category,category_label,image_url,description,features,dimensions,materials').eq('is_published', true).order('sort_order').limit(4);
+      if (!cancelled && !error && data?.length) {
+        setFeaturedProducts(data.map(row => ({ id: row.id, name: row.name, category: row.category as Product['category'], categoryLabel: row.category_label, image: row.image_url, description: row.description, features: Array.isArray(row.features) ? row.features as string[] : [], dimensions: row.dimensions || undefined, materials: row.materials || undefined })));
+      }
+    };
+    if (supabase) {
+      void loadPublishedSettings();
+      void loadFeaturedProducts();
+    }
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % HERO_SLIDES.length);
+      setCurrentSlide((prev) => (prev + 1) % heroSlides.length);
     }, 6000);
     return () => clearInterval(interval);
-  }, []);
+  }, [heroSlides.length]);
 
   const nextSlide = () => {
-    setCurrentSlide((prev) => (prev + 1) % HERO_SLIDES.length);
+    setCurrentSlide((prev) => (prev + 1) % heroSlides.length);
   };
 
   const prevSlide = () => {
-    setCurrentSlide((prev) => (prev - 1 + HERO_SLIDES.length) % HERO_SLIDES.length);
+    setCurrentSlide((prev) => (prev - 1 + heroSlides.length) % heroSlides.length);
   };
 
   const handleNav = (e: React.MouseEvent, path: string) => {
@@ -31,8 +78,6 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     onNavigate(path);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-
-  const featuredProducts = PRODUCTS.slice(0, 4);
 
   return (
     <div className="min-h-screen bg-[#F6F1E8]">
@@ -49,8 +94,8 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           >
             <div className="absolute inset-0 bg-gradient-to-t from-[#1C1511] via-[#1C1511]/40 to-[#1C1511]/60 z-10" />
             <img
-              src={HERO_SLIDES[currentSlide].image}
-              alt={HERO_SLIDES[currentSlide].title}
+              src={heroSlides[currentSlide].image}
+              alt={heroSlides[currentSlide].title}
               className="w-full h-full object-cover object-center"
               referrerPolicy="no-referrer"
             />
@@ -66,7 +111,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
               transition={{ duration: 0.6, delay: 0.2 }}
               className="inline-block mb-4 px-4 py-1.5 rounded-full bg-[#C9A45C]/20 border border-[#C9A45C]/40 text-[#DFC27A] text-xs uppercase tracking-[0.25em]"
             >
-              {HERO_SLIDES[currentSlide].badge}
+              {heroSlides[currentSlide].badge}
             </motion.div>
 
             <motion.h1
@@ -76,7 +121,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
               transition={{ duration: 0.8, delay: 0.4 }}
               className="font-serif text-4xl sm:text-6xl md:text-7xl font-light tracking-wide leading-tight mb-6 text-[#F6F1E8]"
             >
-              {HERO_SLIDES[currentSlide].title}
+              {heroSlides[currentSlide].title}
             </motion.h1>
 
             <motion.p
@@ -86,7 +131,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
               transition={{ duration: 0.8, delay: 0.6 }}
               className="font-sans text-base sm:text-lg md:text-xl text-[#D8CEC0] max-w-2xl mx-auto font-light mb-10"
             >
-              {HERO_SLIDES[currentSlide].subtitle}
+              {heroSlides[currentSlide].subtitle}
             </motion.p>
 
             <motion.div
@@ -97,11 +142,16 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
               className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-6"
             >
               <a
-                href="/collections"
-                onClick={(e) => handleNav(e, '/collections')}
+                href={heroSlides[currentSlide].button_url || '/collections'}
+                onClick={(e) => {
+                  const target = heroSlides[currentSlide].button_url || '/collections';
+                  if (target.startsWith('/')) handleNav(e, target);
+                }}
+                target={(heroSlides[currentSlide].button_url || '/collections').startsWith('/') ? undefined : '_blank'}
+                rel={(heroSlides[currentSlide].button_url || '/collections').startsWith('/') ? undefined : 'noopener noreferrer'}
                 className="w-full sm:w-auto inline-flex items-center justify-center rounded-full bg-[#C9A45C] hover:bg-[#DFC27A] text-[#1C1511] font-medium text-sm tracking-wider uppercase px-8 py-4 transition-all shadow-xl hover:scale-105"
               >
-                Explore Collections
+                {heroSlides[currentSlide].button_text || 'Explore Collections'}
                 <ArrowRight className="w-4 h-4 ml-2" />
               </a>
               <a
@@ -126,7 +176,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           </button>
 
           <div className="flex items-center space-x-3">
-            {HERO_SLIDES.map((_, idx) => (
+            {heroSlides.map((_, idx) => (
               <button
                 key={idx}
                 onClick={() => setCurrentSlide(idx)}
@@ -157,6 +207,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           <h2 className="font-serif text-4xl sm:text-5xl md:text-6xl font-normal leading-tight mb-8">
             FURNITURE FOR THE WAY YOU LIVE.
           </h2>
+          {editorialImage && <img src={editorialImage} alt="Tatari Furniture editorial" className="mx-auto mb-10 max-h-[520px] w-full max-w-4xl rounded-2xl object-cover shadow-lg" loading="lazy" referrerPolicy="no-referrer" />}
           <p className="font-sans text-base sm:text-lg text-[#3A271C] max-w-2xl mx-auto font-light leading-relaxed mb-12">
             Explore furniture created to bring comfort, style and character into everyday spaces. Located in Jos, we offer carefully curated pieces that define modern Nigerian living with elegance and durability.
           </p>
@@ -357,7 +408,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
             Visit Our Showroom in Jos
           </h2>
           <p className="text-[#D8CEC0] text-base sm:text-lg font-light max-w-xl mx-auto mb-8">
-            {BUSINESS_INFO.address}. Experience our craftsmanship firsthand or speak with our team directly.
+            {businessAddress}. Experience our craftsmanship firsthand or speak with our team directly.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4">
             <a
@@ -368,7 +419,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
               Get Directions & Contact
             </a>
             <a
-              href={BUSINESS_INFO.whatsappUrl}
+              href={whatsappUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center justify-center rounded-full bg-[#25D366] text-white font-medium text-xs tracking-wider uppercase px-8 py-4 hover:opacity-90 transition-opacity shadow-lg"

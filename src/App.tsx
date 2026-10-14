@@ -13,6 +13,7 @@ import { About } from './pages/About';
 import { Collections } from './pages/Collections';
 import { Gallery } from './pages/Gallery';
 import { Contact } from './pages/Contact';
+import { Admin } from './pages/Admin';
 
 const COLLECTION_ALIASES = ['/living-room', '/bedroom', '/custom-furniture'];
 
@@ -21,7 +22,7 @@ const getCanonicalPath = (path: string) =>
 
 export default function App() {
   const [currentPath, setCurrentPath] = useState<string>(() => {
-    const path = getCanonicalPath(window.location.pathname || '/');
+    const path = window.location.pathname === '/admin' ? '/admin' : getCanonicalPath(window.location.pathname || '/');
     if (path !== window.location.pathname) {
       window.history.replaceState({}, '', path);
     }
@@ -31,8 +32,9 @@ export default function App() {
 
   useEffect(() => {
     const handlePopState = () => {
-      const path = getCanonicalPath(window.location.pathname || '/');
-      if (path !== window.location.pathname) {
+      const rawPath = window.location.pathname || '/';
+      const path = rawPath === '/admin' ? '/admin' : getCanonicalPath(rawPath);
+      if (path !== rawPath) {
         window.history.replaceState({}, '', path);
       }
       setCurrentPath(path);
@@ -46,6 +48,16 @@ export default function App() {
     window.history.pushState({}, '', canonicalPath);
     setCurrentPath(canonicalPath);
   };
+
+  const exitAdmin = () => {
+    window.history.pushState({}, '', '/');
+    setCurrentPath('/');
+    setLoadingComplete(false);
+  };
+
+  if (currentPath === '/admin') {
+    return <Admin onExit={exitAdmin} />;
+  }
 
   const renderPage = () => {
     switch (currentPath) {

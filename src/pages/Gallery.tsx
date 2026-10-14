@@ -1,19 +1,34 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { GALLERY_ITEMS } from '../data';
 import { GalleryItem } from '../types';
 import { LightboxModal } from '../components/LightboxModal';
 import { Eye } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 export const Gallery: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
+  const [galleryItems, setGalleryItems] = useState<GalleryItem[]>(GALLERY_ITEMS);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadGallery = async () => {
+      if (!supabase) return;
+      const { data, error } = await supabase.from('gallery_items').select('id,title,category,image_url,description').eq('is_published', true).order('sort_order');
+      if (!cancelled && !error && data && data.length > 0) {
+        setGalleryItems(data.map(row => ({ id: row.id, title: row.title, category: row.category, image: row.image_url, description: row.description })));
+      }
+    };
+    void loadGallery();
+    return () => { cancelled = true; };
+  }, []);
 
   const categories = ['All', 'Living Room', 'Bedroom', 'Furniture', 'Showroom', 'Interiors'];
 
   const filteredItems = activeCategory === 'All'
-    ? GALLERY_ITEMS
-    : GALLERY_ITEMS.filter((item) => item.category === activeCategory);
+    ? galleryItems
+    : galleryItems.filter((item) => item.category === activeCategory);
 
   const handleOpenLightbox = (index: number) => {
     setSelectedItemIndex(index);

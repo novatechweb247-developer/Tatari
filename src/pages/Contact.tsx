@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { MapPin, Phone, MessageCircle, Send, CheckCircle2, Navigation } from 'lucide-react';
 import { BUSINESS_INFO } from '../data';
 import { EnquiryFormData } from '../types';
+import { isSupabaseConfigured, supabase } from '../lib/supabase';
 
 export const Contact: React.FC = () => {
   const [formData, setFormData] = useState<EnquiryFormData>({
@@ -15,6 +16,7 @@ export const Contact: React.FC = () => {
   });
 
   const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -22,14 +24,41 @@ export const Contact: React.FC = () => {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.fullName.trim() || !formData.phone.trim() || !formData.message.trim()) {
       setError('Please fill in all required fields (Name, Phone, Message).');
       return;
     }
+    if (formData.fullName.trim().length < 2 || formData.fullName.trim().length > 120 ||
+        formData.phone.trim().length < 5 || formData.phone.trim().length > 40 ||
+        formData.message.trim().length < 3 || formData.message.trim().length > 5000) {
+      setError('Please check your details. Name, phone, or message is outside the allowed length.');
+      return;
+    }
+    if (!isSupabaseConfigured || !supabase) {
+      setError('The enquiry service is temporarily unavailable. Please contact us by phone or WhatsApp.');
+      return;
+    }
     setError('');
-    setSubmitted(true);
+    setSaving(true);
+    try {
+      const { error: insertError } = await supabase.from('enquiries').insert({
+        full_name: formData.fullName.trim(),
+        phone: formData.phone.trim(),
+        category: formData.category,
+        subject: formData.subject.trim(),
+        message: formData.message.trim(),
+        preferred_contact: formData.preferredContact,
+      });
+      if (insertError) throw insertError;
+      setSubmitted(true);
+    } catch (err) {
+      console.error('Unable to save enquiry:', err);
+      setError('We could not save your enquiry. Please try again or contact us by phone or WhatsApp.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -284,10 +313,11 @@ export const Contact: React.FC = () => {
 
                 <button
                   type="submit"
+                  disabled={saving}
                   className="w-full inline-flex items-center justify-center rounded-full bg-[#1C1511] hover:bg-[#3A271C] text-[#F6F1E8] font-medium text-xs tracking-wider uppercase py-4 transition-colors shadow-lg"
                 >
                   <Send className="w-4 h-4 mr-2 text-[#C9A45C]" />
-                  Send Enquiry
+                  {saving ? "Sending..." : "Send Enquiry"}
                 </button>
               </form>
             )}
