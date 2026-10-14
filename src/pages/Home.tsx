@@ -9,9 +9,19 @@ interface HomeProps {
   onNavigate: (path: string) => void;
 }
 
+type HomeHeroSlide = {
+  id: number;
+  title: string;
+  subtitle: string;
+  badge: string;
+  image: string;
+  button_text?: string;
+  button_url?: string;
+};
+
 export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   const [currentSlide, setCurrentSlide] = useState(0);
-  const [heroSlides, setHeroSlides] = useState(HERO_SLIDES);
+  const [heroSlides, setHeroSlides] = useState<HomeHeroSlide[]>(HERO_SLIDES);
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>(PRODUCTS.slice(0, 4));
   const [editorialImage, setEditorialImage] = useState('');
   const [businessAddress, setBusinessAddress] = useState(BUSINESS_INFO.address);
@@ -21,9 +31,9 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     let cancelled = false;
     const loadPublishedHero = async () => {
       if (!supabase) return;
-      const { data, error } = await supabase.from('hero_slides').select('slide_number,title,subtitle,badge,image_url,is_published').eq('is_published', true).order('slide_number');
+      const { data, error } = await supabase.from('hero_slides').select('slide_number,title,subtitle,badge,image_url,button_text,button_url,is_published').eq('is_published', true).order('slide_number');
       if (!cancelled && !error && data?.length === 3 && data.every(row => row.title && row.image_url)) {
-        setHeroSlides(data.map(row => ({ id: row.slide_number, title: row.title, subtitle: row.subtitle, badge: row.badge, image: row.image_url })));
+        setHeroSlides(data.map(row => ({ id: row.slide_number, title: row.title, subtitle: row.subtitle, badge: row.badge, image: row.image_url, button_text: row.button_text, button_url: row.button_url })));
       }
     };
     void loadPublishedHero();
@@ -132,11 +142,16 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
               className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-6"
             >
               <a
-                href="/collections"
-                onClick={(e) => handleNav(e, '/collections')}
+                href={heroSlides[currentSlide].button_url || '/collections'}
+                onClick={(e) => {
+                  const target = heroSlides[currentSlide].button_url || '/collections';
+                  if (target.startsWith('/')) handleNav(e, target);
+                }}
+                target={(heroSlides[currentSlide].button_url || '/collections').startsWith('/') ? undefined : '_blank'}
+                rel={(heroSlides[currentSlide].button_url || '/collections').startsWith('/') ? undefined : 'noopener noreferrer'}}
                 className="w-full sm:w-auto inline-flex items-center justify-center rounded-full bg-[#C9A45C] hover:bg-[#DFC27A] text-[#1C1511] font-medium text-sm tracking-wider uppercase px-8 py-4 transition-all shadow-xl hover:scale-105"
               >
-                Explore Collections
+                {heroSlides[currentSlide].button_text || 'Explore Collections'}
                 <ArrowRight className="w-4 h-4 ml-2" />
               </a>
               <a
