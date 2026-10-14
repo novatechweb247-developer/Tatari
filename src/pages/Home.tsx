@@ -65,7 +65,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
             <div className="absolute inset-0 bg-gradient-to-t from-[#1C1511] via-[#1C1511]/40 to-[#1C1511]/60 z-10" />
             <img
               src={heroSlides[currentSlide].image}
-              alt={HERO_SLIDES[currentSlide].title}
+              alt={heroSlides[currentSlide].title}
               className="w-full h-full object-cover object-center"
               referrerPolicy="no-referrer"
             />
@@ -81,7 +81,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
               transition={{ duration: 0.6, delay: 0.2 }}
               className="inline-block mb-4 px-4 py-1.5 rounded-full bg-[#C9A45C]/20 border border-[#C9A45C]/40 text-[#DFC27A] text-xs uppercase tracking-[0.25em]"
             >
-              {HERO_SLIDES[currentSlide].badge}
+              {heroSlides[currentSlide].badge}
             </motion.div>
 
             <motion.h1
@@ -91,7 +91,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
               transition={{ duration: 0.8, delay: 0.4 }}
               className="font-serif text-4xl sm:text-6xl md:text-7xl font-light tracking-wide leading-tight mb-6 text-[#F6F1E8]"
             >
-              {HERO_SLIDES[currentSlide].title}
+              {heroSlides[currentSlide].title}
             </motion.h1>
 
             <motion.p
@@ -101,7 +101,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
               transition={{ duration: 0.8, delay: 0.6 }}
               className="font-sans text-base sm:text-lg md:text-xl text-[#D8CEC0] max-w-2xl mx-auto font-light mb-10"
             >
-              {HERO_SLIDES[currentSlide].subtitle}
+              {heroSlides[currentSlide].subtitle}
             </motion.p>
 
             <motion.div
