@@ -12,6 +12,10 @@ interface HomeProps {
 export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [heroSlides, setHeroSlides] = useState(HERO_SLIDES);
+  const [featuredProducts, setFeaturedProducts] = useState<Product[]>(PRODUCTS.slice(0, 4));
+  const [editorialImage, setEditorialImage] = useState('');
+  const [businessAddress, setBusinessAddress] = useState(BUSINESS_INFO.address);
+  const [whatsappUrl, setWhatsappUrl] = useState(BUSINESS_INFO.whatsappUrl);
 
   useEffect(() => {
     let cancelled = false;
@@ -23,6 +27,24 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
       }
     };
     void loadPublishedHero();
+    const loadPublishedSettings = async () => {
+      const { data, error } = await supabase.from('site_settings').select('address,whatsapp_url,editorial_image_url,is_published').eq('id', 'main').eq('is_published', true).maybeSingle();
+      if (!cancelled && !error && data) {
+        if (data.editorial_image_url) setEditorialImage(data.editorial_image_url);
+        if (data.address) setBusinessAddress(data.address);
+        if (data.whatsapp_url) setWhatsappUrl(data.whatsapp_url);
+      }
+    };
+    const loadFeaturedProducts = async () => {
+      const { data, error } = await supabase.from('products').select('id,name,category,category_label,image_url,description,features,dimensions,materials').eq('is_published', true).order('sort_order').limit(4);
+      if (!cancelled && !error && data?.length) {
+        setFeaturedProducts(data.map(row => ({ id: row.id, name: row.name, category: row.category as Product['category'], categoryLabel: row.category_label, image: row.image_url, description: row.description, features: Array.isArray(row.features) ? row.features as string[] : [], dimensions: row.dimensions || undefined, materials: row.materials || undefined })));
+      }
+    };
+    if (supabase) {
+      void loadPublishedSettings();
+      void loadFeaturedProducts();
+    }
     return () => { cancelled = true; };
   }, []);
 
@@ -46,8 +68,6 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     onNavigate(path);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-
-  const featuredProducts = PRODUCTS.slice(0, 4);
 
   return (
     <div className="min-h-screen bg-[#F6F1E8]">
@@ -172,6 +192,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           <h2 className="font-serif text-4xl sm:text-5xl md:text-6xl font-normal leading-tight mb-8">
             FURNITURE FOR THE WAY YOU LIVE.
           </h2>
+          {editorialImage && <img src={editorialImage} alt="Tatari Furniture editorial" className="mx-auto mb-10 max-h-[520px] w-full max-w-4xl rounded-2xl object-cover shadow-lg" loading="lazy" referrerPolicy="no-referrer" />}
           <p className="font-sans text-base sm:text-lg text-[#3A271C] max-w-2xl mx-auto font-light leading-relaxed mb-12">
             Explore furniture created to bring comfort, style and character into everyday spaces. Located in Jos, we offer carefully curated pieces that define modern Nigerian living with elegance and durability.
           </p>
@@ -372,7 +393,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
             Visit Our Showroom in Jos
           </h2>
           <p className="text-[#D8CEC0] text-base sm:text-lg font-light max-w-xl mx-auto mb-8">
-            {BUSINESS_INFO.address}. Experience our craftsmanship firsthand or speak with our team directly.
+            {businessAddress}. Experience our craftsmanship firsthand or speak with our team directly.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4">
             <a
@@ -383,7 +404,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
               Get Directions & Contact
             </a>
             <a
-              href={BUSINESS_INFO.whatsappUrl}
+              href={whatsappUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center justify-center rounded-full bg-[#25D366] text-white font-medium text-xs tracking-wider uppercase px-8 py-4 hover:opacity-90 transition-opacity shadow-lg"
