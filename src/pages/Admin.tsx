@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, LayoutDashboard, PanelsTopLeft, Sofa, Images, Inbox, Settings, LogOut, Save, Upload, RefreshCw, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, LayoutDashboard, PanelsTopLeft, Sofa, Images, Inbox, Settings, LogOut, Save, Upload, RefreshCw } from 'lucide-react';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 
 type Section = 'Overview' | 'Homepage' | 'Collections' | 'Gallery' | 'Enquiries' | 'Business details';
-type HeroSlide = { slide_number: number; title: string; subtitle: string; badge: string; image_url: string; button_text: string; button_url: string; is_published: boolean };
-type SiteSettings = { id: string; business_name: string; tagline: string; address: string; phone: string; phone_international: string; whatsapp_url: string; map_url: string; description: string; editorial_image_url: string; is_published: boolean };
+type HeroSlide = { slide_number: number; title: string; subtitle: string; badge: string; image_url: string; button_text: string; button_url: string; is_published: boolean; draft_data?: Record<string, any> | null };
+type SiteSettings = { id: string; business_name: string; tagline: string; address: string; phone: string; phone_international: string; whatsapp_url: string; map_url: string; description: string; editorial_image_url: string; is_published: boolean; draft_data?: Record<string, any> | null };
 type Enquiry = { id: string; full_name: string; phone: string; category: string; subject: string; message: string; preferred_contact: string; status: string; created_at: string };
 
 const sections: { label: Section; icon: React.ReactNode; description: string }[] = [
@@ -51,8 +51,9 @@ export const Admin: React.FC<{ onExit: () => void }> = ({ onExit }) => {
     ]);
     const firstError = hero.error || site.error || inbox.error || products.error || gallery.error;
     if (firstError) throw firstError;
-    setSlides((hero.data || []) as HeroSlide[]);
-    setSettings(site.data as SiteSettings | null);
+    setSlides(((hero.data || []) as HeroSlide[]).map(row => ({ ...row, ...(row.draft_data || {}) })));
+    const siteRow = site.data as SiteSettings | null;
+    setSettings(siteRow ? ({ ...siteRow, ...(siteRow.draft_data || {}) } as SiteSettings) : null);
     setEnquiries((inbox.data || []) as Enquiry[]);
     setCounts({ products: products.count || 0, gallery: gallery.count || 0, enquiries: inbox.data?.length || 0 });
   }, []);
@@ -88,7 +89,7 @@ export const Admin: React.FC<{ onExit: () => void }> = ({ onExit }) => {
         throw new Error('This account is not authorized. Add its user ID to public.admin_users first.');
       }
       setSession(data.session); setPassword(''); await loadData();
-      setNotice('Signed in securely.');
+      setNotice('Signed in.');
     } catch (e) { setError(e instanceof Error ? e.message : 'Sign-in failed.'); }
     finally { setBusy(false); setLoading(false); }
   };
@@ -100,7 +101,7 @@ export const Admin: React.FC<{ onExit: () => void }> = ({ onExit }) => {
     finally { setBusy(false); }
   };
 
-  const uploadImage = async (file?: File) => {
+  const uploadImage = async (file: File | undefined, target: { kind: 'editorial' } | { kind: 'hero'; slideNumber: number }) => {
     if (!file || !supabase) return;
     if (!file.type.startsWith('image/')) { setError('Choose an image file.'); return; }
     if (file.size > 10 * 1024 * 1024) { setError('Image must be 10 MB or smaller.'); return; }
@@ -111,20 +112,17 @@ export const Admin: React.FC<{ onExit: () => void }> = ({ onExit }) => {
       if (uploadError) throw uploadError;
       const { data } = supabase!.storage.from('site-media').getPublicUrl(path);
       const url = data.publicUrl;
-      if (active === 'Homepage' && settings) setSettings({ ...settings, editorial_image_url: url });
-      else {
-        const slideNo = Number(window.prompt('Which hero slide should use this image? Enter 1, 2, or 3.'));
-        if (![1, 2, 3].includes(slideNo)) throw new Error('Upload completed, but no slide was selected. The image remains in media storage.');
-        setSlides(prev => prev.map(s => s.slide_number === slideNo ? { ...s, image_url: url } : s));
-      }
+      if (target.kind === 'editorial' && settings) setSettings(prev => prev ? { ...prev, editorial_image_url: url } : prev);
+      else if (target.kind === 'hero') setSlides(prev => prev.map(s => s.slide_number === target.slideNumber ? { ...s, image_url: url } : s));
     }, 'Image uploaded to persistent media storage. Save your content changes next.');
   };
 
   const saveSlide = async (slide: HeroSlide, publish: boolean) => {
     if (!supabase) return;
     const { error: saveError } = await supabase.from('hero_slides').update({
-      title: slide.title, subtitle: slide.subtitle, badge: slide.badge, image_url: slide.image_url,
-      button_text: slide.button_text, button_url: slide.button_url, is_published: publish ? true : slide.is_published, updated_at: new Date().toISOString(),
+      draft_data: { title: slide.title, subtitle: slide.subtitle, badge: slide.badge, image_url: slide.image_url, button_text: slide.button_text, button_url: slide.button_url },
+      ...(publish ? { title: slide.title, subtitle: slide.subtitle, badge: slide.badge, image_url: slide.image_url, button_text: slide.button_text, button_url: slide.button_url, is_published: true } : {}),
+      updated_at: new Date().toISOString(),
     }).eq('slide_number', slide.slide_number);
     if (saveError) throw saveError;
   };
@@ -132,10 +130,9 @@ export const Admin: React.FC<{ onExit: () => void }> = ({ onExit }) => {
   const saveSettings = async (publish: boolean) => {
     if (!supabase || !settings) return;
     const { error: saveError } = await supabase.from('site_settings').update({
-      business_name: settings.business_name, tagline: settings.tagline, address: settings.address,
-      phone: settings.phone, phone_international: settings.phone_international, whatsapp_url: settings.whatsapp_url,
-      map_url: settings.map_url, description: settings.description, editorial_image_url: settings.editorial_image_url,
-      is_published: publish ? true : settings.is_published, updated_at: new Date().toISOString(),
+      draft_data: { business_name: settings.business_name, tagline: settings.tagline, address: settings.address, phone: settings.phone, phone_international: settings.phone_international, whatsapp_url: settings.whatsapp_url, map_url: settings.map_url, description: settings.description, editorial_image_url: settings.editorial_image_url },
+      ...(publish ? { business_name: settings.business_name, tagline: settings.tagline, address: settings.address, phone: settings.phone, phone_international: settings.phone_international, whatsapp_url: settings.whatsapp_url, map_url: settings.map_url, description: settings.description, editorial_image_url: settings.editorial_image_url, is_published: true } : {}),
+      updated_at: new Date().toISOString(),
     }).eq('id', 'main');
     if (saveError) throw saveError;
   };
@@ -149,14 +146,14 @@ export const Admin: React.FC<{ onExit: () => void }> = ({ onExit }) => {
 
   if (!isSupabaseConfigured || !supabase) return <div className="min-h-screen bg-[#F6F1E8] p-8 text-[#1C1511]"><h1 className="font-serif text-3xl">Tatari Admin</h1><p className="mt-4">Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in the deployment environment.</p></div>;
 
-  if (loading) return <div className="min-h-screen bg-[#F6F1E8] p-8 text-[#1C1511]">Checking secure administrator access…</div>;
+  if (loading) return <div className="min-h-screen bg-[#F6F1E8] p-8 text-[#1C1511]">Loading Admin Center…</div>;
 
   if (!session) return (
     <div className="flex min-h-screen items-center justify-center bg-[#F6F1E8] px-4 text-[#1C1511]">
       <form onSubmit={signIn} className="w-full max-w-md rounded-3xl border border-[#D8CEC0] bg-white p-8 shadow-xl">
-        <p className="font-serif text-2xl tracking-[0.18em]">TATARI</p><p className="mt-1 text-[10px] uppercase tracking-[0.24em] text-[#8B6A37]">Secure Website Admin</p>
+        <p className="font-serif text-2xl tracking-[0.18em]">TATARI</p><p className="mt-1 text-[10px] uppercase tracking-[0.24em] text-[#8B6A37]">Website Admin</p>
         <h1 className="mt-8 font-serif text-3xl">Administrator sign in</h1>
-        <p className="mt-3 text-sm leading-6 text-[#6B5546]">Only an account explicitly authorized in the database can access website management.</p>
+        <p className="mt-3 text-sm leading-6 text-[#6B5546]">Sign in to manage the website.</p>
         {error && <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         <label className={labelClass + ' mt-6'}>Email address</label><input className={inputClass} type="email" autoComplete="username" required value={email} onChange={e=>setEmail(e.target.value)} />
         <label className={labelClass + ' mt-4'}>Password</label><input className={inputClass} type="password" autoComplete="current-password" required value={password} onChange={e=>setPassword(e.target.value)} />
@@ -176,12 +173,12 @@ export const Admin: React.FC<{ onExit: () => void }> = ({ onExit }) => {
         <main className="min-w-0"><div className="mb-8"><p className="mb-2 text-xs font-semibold uppercase tracking-[0.25em] text-[#8B6A37]">Tatari Furniture</p><h1 className="font-serif text-3xl sm:text-4xl">{active==='Overview'?'Welcome to your Admin Center.':active}</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-[#6B5546]">{sections.find(s=>s.label===active)?.description}</p></div>
           {notice && <p role="status" className="mb-4 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-800">{notice}</p>}
           {error && <p role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</p>}
-          {active==='Overview' && <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{[{label:'Hero slides',value:slides.length},{label:'Products',value:counts.products},{label:'Gallery images',value:counts.gallery},{label:'Recent enquiries',value:counts.enquiries}].map(x=><div key={x.label} className={panel}><p className="text-sm text-[#6B5546]">{x.label}</p><p className="mt-2 font-serif text-3xl">{x.value}</p></div>)}<div className={panel+' sm:col-span-2 xl:col-span-3'}><p className="flex items-center gap-2 font-semibold"><ShieldCheck size={18}/> Secure connection active</p><p className="mt-2 text-sm text-[#6B5546]">Signed in as {session.user.email}. Content and enquiries are loaded from Supabase.</p></div></div>}
-          {active==='Homepage' && <div className="space-y-6"><section className={panel}><div className="mb-5 flex items-center justify-between"><h2 className="font-serif text-2xl">Hero slides (exactly 3)</h2><span className="text-xs text-[#6B5546]">{slides.length}/3 fixed slots</span></div>{slides.slice(0,3).map(slide=><div key={slide.slide_number} className="mb-6 rounded-xl border border-[#D8CEC0] p-4"><h3 className="mb-4 font-semibold">Slide {slide.slide_number} {slide.is_published?'· Published':'· Draft'}</h3><div className="grid gap-4 sm:grid-cols-2">{field('Title',slide.title,v=>setSlides(prev=>prev.map(s=>s.slide_number===slide.slide_number?{...s,title:v}:s)))}{field('Badge',slide.badge,v=>setSlides(prev=>prev.map(s=>s.slide_number===slide.slide_number?{...s,badge:v}:s)))}<div className="sm:col-span-2">{field('Subtitle',slide.subtitle,v=>setSlides(prev=>prev.map(s=>s.slide_number===slide.slide_number?{...s,subtitle:v}:s)))}</div>{field('Image URL',slide.image_url,v=>setSlides(prev=>prev.map(s=>s.slide_number===slide.slide_number?{...s,image_url:v}:s)))}{field('Button text',slide.button_text,v=>setSlides(prev=>prev.map(s=>s.slide_number===slide.slide_number?{...s,button_text:v}:s)))}{field('Button link',slide.button_url,v=>setSlides(prev=>prev.map(s=>s.slide_number===slide.slide_number?{...s,button_url:v}:s)))}<label className="text-xs text-[#6B5546]">Upload image<input className="mt-2 block w-full text-sm" type="file" accept="image/*" onChange={e=>uploadImage(e.target.files?.[0])}/></label></div><div className="mt-4 flex flex-wrap gap-2"><button disabled={busy} onClick={()=>runSave(()=>saveSlide(slide,false),'Slide saved as draft.')} className="inline-flex items-center gap-2 rounded-full border border-[#D8CEC0] px-4 py-2 text-xs"><Save size={14}/> Save draft</button><button disabled={busy} onClick={()=>runSave(()=>saveSlide(slide,true),'Slide published.')} className="rounded-full bg-[#1C1511] px-4 py-2 text-xs text-white">Publish slide</button></div></div>)}</section>
-          {settings && <section className={panel}><h2 className="mb-5 font-serif text-2xl">Homepage Editorial Image</h2>{settings.editorial_image_url && <img src={settings.editorial_image_url} alt="Current editorial" className="mb-4 max-h-64 rounded-xl object-contain"/>}<label className={labelClass}>Editorial image URL</label><input className={inputClass} value={settings.editorial_image_url} onChange={e=>setSettings({...settings,editorial_image_url:e.target.value})}/><label className="mt-4 block text-sm">Upload replacement<input type="file" accept="image/*" className="mt-2 block w-full text-sm" onChange={e=>uploadImage(e.target.files?.[0])}/></label><div className="mt-5 flex gap-2"><button disabled={busy} onClick={()=>runSave(()=>saveSettings(false),'Editorial image saved as draft.')} className="rounded-full border border-[#D8CEC0] px-4 py-2 text-xs">Save draft</button><button disabled={busy} onClick={()=>runSave(()=>saveSettings(true),'Editorial image published.')} className="rounded-full bg-[#1C1511] px-4 py-2 text-xs text-white">Publish image</button></div></section>}</div>}
+          {active==='Overview' && <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{[{label:'Hero slides',value:slides.length},{label:'Products',value:counts.products},{label:'Gallery images',value:counts.gallery},{label:'Recent enquiries',value:counts.enquiries}].map(x=><div key={x.label} className={panel}><p className="text-sm text-[#6B5546]">{x.label}</p><p className="mt-2 font-serif text-3xl">{x.value}</p></div>)}</div>}
+          {active==='Homepage' && <div className="space-y-6"><section className={panel}><div className="mb-5 flex items-center justify-between"><h2 className="font-serif text-2xl">Hero slides (exactly 3)</h2><span className="text-xs text-[#6B5546]">{slides.length}/3 fixed slots</span></div>{slides.slice(0,3).map(slide=><div key={slide.slide_number} className="mb-6 rounded-xl border border-[#D8CEC0] p-4"><h3 className="mb-4 font-semibold">Slide {slide.slide_number} {slide.is_published?'· Published':'· Draft'}</h3><div className="grid gap-4 sm:grid-cols-2">{field('Title',slide.title,v=>setSlides(prev=>prev.map(s=>s.slide_number===slide.slide_number?{...s,title:v}:s)))}{field('Badge',slide.badge,v=>setSlides(prev=>prev.map(s=>s.slide_number===slide.slide_number?{...s,badge:v}:s)))}<div className="sm:col-span-2">{field('Subtitle',slide.subtitle,v=>setSlides(prev=>prev.map(s=>s.slide_number===slide.slide_number?{...s,subtitle:v}:s)))}</div>{field('Image URL',slide.image_url,v=>setSlides(prev=>prev.map(s=>s.slide_number===slide.slide_number?{...s,image_url:v}:s)))}{field('Button text',slide.button_text,v=>setSlides(prev=>prev.map(s=>s.slide_number===slide.slide_number?{...s,button_text:v}:s)))}{field('Button link',slide.button_url,v=>setSlides(prev=>prev.map(s=>s.slide_number===slide.slide_number?{...s,button_url:v}:s)))}<label className="text-xs text-[#6B5546]">Upload image<input className="mt-2 block w-full text-sm" type="file" accept="image/*" onChange={e=>uploadImage(e.target.files?.[0],{kind:'hero',slideNumber:slide.slide_number})}/></label></div><div className="mt-4 flex flex-wrap gap-2"><button disabled={busy} onClick={()=>runSave(()=>saveSlide(slide,false),'Slide saved as draft.')} className="inline-flex items-center gap-2 rounded-full border border-[#D8CEC0] px-4 py-2 text-xs"><Save size={14}/> Save draft</button><button disabled={busy} onClick={()=>runSave(()=>saveSlide(slide,true),'Slide published.')} className="rounded-full bg-[#1C1511] px-4 py-2 text-xs text-white">Publish slide</button></div></div>)}</section>
+          {settings && <section className={panel}><h2 className="mb-5 font-serif text-2xl">Homepage Editorial Image</h2>{settings.editorial_image_url && <img src={settings.editorial_image_url} alt="Current editorial" className="mb-4 max-h-64 rounded-xl object-contain"/>}<label className={labelClass}>Editorial image URL</label><input className={inputClass} value={settings.editorial_image_url} onChange={e=>setSettings({...settings,editorial_image_url:e.target.value})}/><label className="mt-4 block text-sm">Upload replacement<input type="file" accept="image/*" className="mt-2 block w-full text-sm" onChange={e=>uploadImage(e.target.files?.[0],{kind:'editorial'})}/></label><div className="mt-5 flex gap-2"><button disabled={busy} onClick={()=>runSave(()=>saveSettings(false),'Editorial image saved as draft.')} className="rounded-full border border-[#D8CEC0] px-4 py-2 text-xs">Save draft</button><button disabled={busy} onClick={()=>runSave(()=>saveSettings(true),'Editorial image published.')} className="rounded-full bg-[#1C1511] px-4 py-2 text-xs text-white">Publish image</button></div></section>}</div>}
           {active==='Business details' && settings && <section className={panel}><div className="grid gap-4 sm:grid-cols-2">{field('Business name',settings.business_name,v=>setSettings({...settings,business_name:v}))}{field('Tagline',settings.tagline,v=>setSettings({...settings,tagline:v}))}{field('Showroom address',settings.address,v=>setSettings({...settings,address:v}))}{field('Phone display',settings.phone,v=>setSettings({...settings,phone:v}))}{field('Phone link',settings.phone_international,v=>setSettings({...settings,phone_international:v}))}{field('WhatsApp URL',settings.whatsapp_url,v=>setSettings({...settings,whatsapp_url:v}))}{field('Map URL',settings.map_url,v=>setSettings({...settings,map_url:v}))}<div className="sm:col-span-2">{field('Description',settings.description,v=>setSettings({...settings,description:v}))}</div></div><div className="mt-5 flex gap-2"><button disabled={busy} onClick={()=>runSave(()=>saveSettings(false),'Business details saved as draft.')} className="rounded-full border border-[#D8CEC0] px-4 py-2 text-xs">Save draft</button><button disabled={busy} onClick={()=>runSave(()=>saveSettings(true),'Business details published.')} className="rounded-full bg-[#1C1511] px-4 py-2 text-xs text-white">Publish changes</button></div></section>}
           {active==='Enquiries' && <section className={panel}><h2 className="mb-5 font-serif text-2xl">Customer enquiries</h2>{enquiries.length===0?<p className="text-sm text-[#6B5546]">No enquiries have been saved yet.</p>:<div className="space-y-4">{enquiries.map(item=><article key={item.id} className="rounded-xl border border-[#D8CEC0] p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold">{item.full_name}</h3><p className="mt-1 text-sm">{item.phone} · {item.preferred_contact}</p><p className="mt-1 text-xs text-[#6B5546]">{new Date(item.created_at).toLocaleString()} · {item.category}</p></div><select aria-label={'Status for '+item.full_name} className="rounded-lg border border-[#D8CEC0] p-2 text-xs" value={item.status} onChange={e=>runSave(()=>updateEnquiry(item,e.target.value),'Enquiry status updated.')}><option value="new">New</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option><option value="archived">Archived</option></select></div>{item.subject&&<p className="mt-3 font-medium">{item.subject}</p>}<p className="mt-2 whitespace-pre-wrap text-sm leading-6">{item.message}</p></article>)}</div>}</section>}
-          {(active==='Collections'||active==='Gallery') && <section className={panel}><h2 className="font-serif text-2xl">{active} management</h2><p className="mt-3 text-sm leading-6 text-[#6B5546]">The persistent database tables are ready. Full create/edit/delete controls and published-data integration are the next implementation step; this section is not yet complete.</p></section>}
+          {(active==='Collections'||active==='Gallery') && <section className={panel}><h2 className="font-serif text-2xl">{active} management</h2><p className="mt-3 text-sm leading-6 text-[#6B5546]">Collection and gallery editing is being connected to the saved website content. Existing public content remains unchanged until published.</p></section>}
         </main>
       </div>
     </div>
