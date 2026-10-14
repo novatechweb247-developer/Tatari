@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { PRODUCTS } from '../data';
 import { Product } from '../types';
+import { useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 
 interface CollectionsProps {
   onNavigate: (path: string) => void;
@@ -9,6 +11,20 @@ interface CollectionsProps {
 
 export const Collections: React.FC<CollectionsProps> = ({ onNavigate }) => {
   const [activeCategory, setActiveCategory] = useState<string>('all');
+  const [products, setProducts] = useState<Product[]>(PRODUCTS);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadProducts = async () => {
+      if (!supabase) return;
+      const { data, error } = await supabase.from('products').select('id,name,category,category_label,image_url,description,features,dimensions,materials').eq('is_published', true).order('sort_order');
+      if (!cancelled && !error && data && data.length > 0) {
+        setProducts(data.map(row => ({ id: row.id, name: row.name, category: row.category as Product['category'], categoryLabel: row.category_label, image: row.image_url, description: row.description, features: Array.isArray(row.features) ? row.features as string[] : [], dimensions: row.dimensions || undefined, materials: row.materials || undefined })));
+      }
+    };
+    void loadProducts();
+    return () => { cancelled = true; };
+  }, []);
 
   const categories = [
     { id: 'all', name: 'All Collections' },
@@ -19,8 +35,8 @@ export const Collections: React.FC<CollectionsProps> = ({ onNavigate }) => {
   ];
 
   const filteredProducts = activeCategory === 'all'
-    ? PRODUCTS
-    : PRODUCTS.filter((p) => p.category === activeCategory);
+    ? products
+    : products.filter((p) => p.category === activeCategory);
 
   const handleNav = (e: React.MouseEvent, path: string) => {
     e.preventDefault();
