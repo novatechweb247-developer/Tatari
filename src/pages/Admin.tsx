@@ -5,6 +5,8 @@ import { isSupabaseConfigured, supabase } from '../lib/supabase';
 type Section = 'Overview' | 'Homepage' | 'Collections' | 'Gallery' | 'Enquiries' | 'Business details';
 type HeroSlide = { slide_number: number; title: string; subtitle: string; badge: string; image_url: string; button_text: string; button_url: string; is_published: boolean; draft_data?: Record<string, any> | null };
 type SiteSettings = { id: string; business_name: string; tagline: string; address: string; phone: string; phone_international: string; whatsapp_url: string; map_url: string; description: string; editorial_image_url: string; is_published: boolean; draft_data?: Record<string, any> | null };
+type ProductRow = { id: string; name: string; category: string; category_label: string; image_url: string; description: string; features: string[]; dimensions: string; materials: string; is_published: boolean; sort_order: number; draft_data?: Record<string, any> | null };
+type GalleryRow = { id: string; title: string; category: string; image_url: string; description: string; is_published: boolean; sort_order: number; draft_data?: Record<string, any> | null };
 type Enquiry = { id: string; full_name: string; phone: string; category: string; subject: string; message: string; preferred_contact: string; status: string; created_at: string };
 
 const sections: { label: Section; icon: React.ReactNode; description: string }[] = [
@@ -30,6 +32,8 @@ export const Admin: React.FC<{ onExit: () => void }> = ({ onExit }) => {
   const [slides, setSlides] = useState<HeroSlide[]>([]);
   const [settings, setSettings] = useState<SiteSettings | null>(null);
   const [enquiries, setEnquiries] = useState<Enquiry[]>([]);
+  const [productRows, setProductRows] = useState<ProductRow[]>([]);
+  const [galleryRows, setGalleryRows] = useState<GalleryRow[]>([]);
   const [counts, setCounts] = useState({ products: 0, gallery: 0, enquiries: 0 });
 
   const verifyAdmin = useCallback(async (userId: string) => {
@@ -42,19 +46,23 @@ export const Admin: React.FC<{ onExit: () => void }> = ({ onExit }) => {
   const loadData = useCallback(async () => {
     if (!supabase) return;
     setError('');
-    const [hero, site, inbox, products, gallery] = await Promise.all([
+    const [hero, site, inbox, products, gallery, productRowsResult, galleryRowsResult] = await Promise.all([
       supabase.from('hero_slides').select('*').order('slide_number'),
       supabase.from('site_settings').select('*').eq('id', 'main').maybeSingle(),
       supabase.from('enquiries').select('*').order('created_at', { ascending: false }).limit(200),
       supabase.from('products').select('id', { count: 'exact', head: true }),
       supabase.from('gallery_items').select('id', { count: 'exact', head: true }),
+      supabase.from('products').select('*').order('sort_order'),
+      supabase.from('gallery_items').select('*').order('sort_order'),
     ]);
-    const firstError = hero.error || site.error || inbox.error || products.error || gallery.error;
+    const firstError = hero.error || site.error || inbox.error || products.error || gallery.error || productRowsResult.error || galleryRowsResult.error;
     if (firstError) throw firstError;
     setSlides(((hero.data || []) as HeroSlide[]).map(row => ({ ...row, ...(row.draft_data || {}) })));
     const siteRow = site.data as SiteSettings | null;
     setSettings(siteRow ? ({ ...siteRow, ...(siteRow.draft_data || {}) } as SiteSettings) : null);
     setEnquiries((inbox.data || []) as Enquiry[]);
+    setProductRows(((productRowsResult.data || []) as ProductRow[]).map(row => ({ ...row, ...(row.draft_data || {}) })));
+    setGalleryRows(((galleryRowsResult.data || []) as GalleryRow[]).map(row => ({ ...row, ...(row.draft_data || {}) })));
     setCounts({ products: products.count || 0, gallery: gallery.count || 0, enquiries: inbox.data?.length || 0 });
   }, []);
 
@@ -137,6 +145,40 @@ export const Admin: React.FC<{ onExit: () => void }> = ({ onExit }) => {
     if (saveError) throw saveError;
   };
 
+  const saveProduct = async (item: ProductRow, publish: boolean) => {
+    if (!supabase) return;
+    const values = { name: item.name, category: item.category, category_label: item.category_label, image_url: item.image_url, description: item.description, features: item.features || [], dimensions: item.dimensions || '', materials: item.materials || '' };
+    const payload = { draft_data: values, ...(publish ? { ...values, is_published: true } : {}), updated_at: new Date().toISOString() };
+    const query = item.id ? supabase.from('products').update(payload).eq('id', item.id) : supabase.from('products').insert({ ...payload, sort_order: productRows.length });
+    const { error: saveError } = await query;
+    if (saveError) throw saveError;
+    await loadData();
+  };
+
+  const saveGalleryItem = async (item: GalleryRow, publish: boolean) => {
+    if (!supabase) return;
+    const values = { title: item.title, category: item.category, image_url: item.image_url, description: item.description };
+    const payload = { draft_data: values, ...(publish ? { ...values, is_published: true } : {}), updated_at: new Date().toISOString() };
+    const query = item.id ? supabase.from('gallery_items').update(payload).eq('id', item.id) : supabase.from('gallery_items').insert({ ...payload, sort_order: galleryRows.length });
+    const { error: saveError } = await query;
+    if (saveError) throw saveError;
+    await loadData();
+  };
+
+  const deleteProduct = async (item: ProductRow) => {
+    if (!supabase || !item.id) return;
+    const { error: deleteError } = await supabase.from('products').delete().eq('id', item.id);
+    if (deleteError) throw deleteError;
+    await loadData();
+  };
+
+  const deleteGalleryItem = async (item: GalleryRow) => {
+    if (!supabase || !item.id) return;
+    const { error: deleteError } = await supabase.from('gallery_items').delete().eq('id', item.id);
+    if (deleteError) throw deleteError;
+    await loadData();
+  };
+
   const updateEnquiry = async (item: Enquiry, status: string) => {
     if (!supabase) return;
     const { error: updateError } = await supabase.from('enquiries').update({ status }).eq('id', item.id);
@@ -178,7 +220,28 @@ export const Admin: React.FC<{ onExit: () => void }> = ({ onExit }) => {
           {settings && <section className={panel}><h2 className="mb-5 font-serif text-2xl">Homepage Editorial Image</h2>{settings.editorial_image_url && <img src={settings.editorial_image_url} alt="Current editorial" className="mb-4 max-h-64 rounded-xl object-contain"/>}<label className={labelClass}>Editorial image URL</label><input className={inputClass} value={settings.editorial_image_url} onChange={e=>setSettings({...settings,editorial_image_url:e.target.value})}/><label className="mt-4 block text-sm">Upload replacement<input type="file" accept="image/*" className="mt-2 block w-full text-sm" onChange={e=>uploadImage(e.target.files?.[0],{kind:'editorial'})}/></label><div className="mt-5 flex gap-2"><button disabled={busy} onClick={()=>runSave(()=>saveSettings(false),'Editorial image saved as draft.')} className="rounded-full border border-[#D8CEC0] px-4 py-2 text-xs">Save draft</button><button disabled={busy} onClick={()=>runSave(()=>saveSettings(true),'Editorial image published.')} className="rounded-full bg-[#1C1511] px-4 py-2 text-xs text-white">Publish image</button></div></section>}</div>}
           {active==='Business details' && settings && <section className={panel}><div className="grid gap-4 sm:grid-cols-2">{field('Business name',settings.business_name,v=>setSettings({...settings,business_name:v}))}{field('Tagline',settings.tagline,v=>setSettings({...settings,tagline:v}))}{field('Showroom address',settings.address,v=>setSettings({...settings,address:v}))}{field('Phone display',settings.phone,v=>setSettings({...settings,phone:v}))}{field('Phone link',settings.phone_international,v=>setSettings({...settings,phone_international:v}))}{field('WhatsApp URL',settings.whatsapp_url,v=>setSettings({...settings,whatsapp_url:v}))}{field('Map URL',settings.map_url,v=>setSettings({...settings,map_url:v}))}<div className="sm:col-span-2">{field('Description',settings.description,v=>setSettings({...settings,description:v}))}</div></div><div className="mt-5 flex gap-2"><button disabled={busy} onClick={()=>runSave(()=>saveSettings(false),'Business details saved as draft.')} className="rounded-full border border-[#D8CEC0] px-4 py-2 text-xs">Save draft</button><button disabled={busy} onClick={()=>runSave(()=>saveSettings(true),'Business details published.')} className="rounded-full bg-[#1C1511] px-4 py-2 text-xs text-white">Publish changes</button></div></section>}
           {active==='Enquiries' && <section className={panel}><h2 className="mb-5 font-serif text-2xl">Customer enquiries</h2>{enquiries.length===0?<p className="text-sm text-[#6B5546]">No enquiries have been saved yet.</p>:<div className="space-y-4">{enquiries.map(item=><article key={item.id} className="rounded-xl border border-[#D8CEC0] p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold">{item.full_name}</h3><p className="mt-1 text-sm">{item.phone} · {item.preferred_contact}</p><p className="mt-1 text-xs text-[#6B5546]">{new Date(item.created_at).toLocaleString()} · {item.category}</p></div><select aria-label={'Status for '+item.full_name} className="rounded-lg border border-[#D8CEC0] p-2 text-xs" value={item.status} onChange={e=>runSave(()=>updateEnquiry(item,e.target.value),'Enquiry status updated.')}><option value="new">New</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option><option value="archived">Archived</option></select></div>{item.subject&&<p className="mt-3 font-medium">{item.subject}</p>}<p className="mt-2 whitespace-pre-wrap text-sm leading-6">{item.message}</p></article>)}</div>}</section>}
-          {(active==='Collections'||active==='Gallery') && <section className={panel}><h2 className="font-serif text-2xl">{active} management</h2><p className="mt-3 text-sm leading-6 text-[#6B5546]">Collection and gallery editing is being connected to the saved website content. Existing public content remains unchanged until published.</p></section>}
+          {active==='Collections' && <section className={panel}>
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><h2 className="font-serif text-2xl">Furniture collections</h2><button onClick={()=>setProductRows(prev=>[...prev,{id:'',name:'',category:'living-room',category_label:'Living Room',image_url:'',description:'',features:[],dimensions:'',materials:'',is_published:false,sort_order:prev.length}])} className="rounded-full bg-[#1C1511] px-4 py-2 text-xs text-white">Add product</button></div>
+            <div className="space-y-5">{productRows.map((item,index)=><article key={item.id || 'new-'+index} className="rounded-xl border border-[#D8CEC0] p-4"><div className="grid gap-4 sm:grid-cols-2">
+              {field('Product name',item.name,v=>setProductRows(prev=>prev.map((r,i)=>i===index?{...r,name:v}:r)))}
+              <label><span className={labelClass}>Category</span><select className={inputClass} value={item.category} onChange={e=>setProductRows(prev=>prev.map((r,i)=>i===index?{...r,category:e.target.value,category_label:({'living-room':'Living Room',bedroom:'Bedroom',custom:'Custom Furniture',other:'Other Furniture'} as Record<string,string>)[e.target.value]}:r))}><option value="living-room">Living Room</option><option value="bedroom">Bedroom</option><option value="custom">Custom Furniture</option><option value="other">Other Furniture</option></select></label>
+              {field('Category label',item.category_label,v=>setProductRows(prev=>prev.map((r,i)=>i===index?{...r,category_label:v}:r)))}
+              {field('Image URL',item.image_url,v=>setProductRows(prev=>prev.map((r,i)=>i===index?{...r,image_url:v}:r)))}
+              <div className="sm:col-span-2">{field('Description',item.description,v=>setProductRows(prev=>prev.map((r,i)=>i===index?{...r,description:v}:r)))}</div>
+              {field('Materials',item.materials,v=>setProductRows(prev=>prev.map((r,i)=>i===index?{...r,materials:v}:r)))}
+              {field('Dimensions',item.dimensions,v=>setProductRows(prev=>prev.map((r,i)=>i===index?{...r,dimensions:v}:r)))}
+              {field('Features (comma separated)',(item.features||[]).join(', '),v=>setProductRows(prev=>prev.map((r,i)=>i===index?{...r,features:v.split(',').map(s=>s.trim()).filter(Boolean)}:r)))}
+            </div><div className="mt-4 flex flex-wrap gap-2"><button disabled={busy} onClick={()=>runSave(()=>saveProduct(item,false),'Product draft saved.')} className="rounded-full border border-[#D8CEC0] px-4 py-2 text-xs">Save draft</button><button disabled={busy} onClick={()=>runSave(()=>saveProduct(item,true),'Product published.')} className="rounded-full bg-[#1C1511] px-4 py-2 text-xs text-white">Publish</button>{item.id&&<button disabled={busy} onClick={()=>runSave(()=>deleteProduct(item),'Product deleted.')} className="rounded-full border border-red-200 px-4 py-2 text-xs text-red-700">Delete</button>}</div></article>)}</div>
+          </section>}
+          {active==='Gallery' && <section className={panel}>
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><h2 className="font-serif text-2xl">Gallery images</h2><button onClick={()=>setGalleryRows(prev=>[...prev,{id:'',title:'',category:'Furniture',image_url:'',description:'',is_published:false,sort_order:prev.length}])} className="rounded-full bg-[#1C1511] px-4 py-2 text-xs text-white">Add gallery item</button></div>
+            <div className="space-y-5">{galleryRows.map((item,index)=><article key={item.id || 'new-'+index} className="rounded-xl border border-[#D8CEC0] p-4"><div className="grid gap-4 sm:grid-cols-2">
+              {field('Title',item.title,v=>setGalleryRows(prev=>prev.map((r,i)=>i===index?{...r,title:v}:r)))}
+              {field('Category',item.category,v=>setGalleryRows(prev=>prev.map((r,i)=>i===index?{...r,category:v}:r)))}
+              {field('Image URL',item.image_url,v=>setGalleryRows(prev=>prev.map((r,i)=>i===index?{...r,image_url:v}:r)))}
+              <div className="sm:col-span-2">{field('Description',item.description,v=>setGalleryRows(prev=>prev.map((r,i)=>i===index?{...r,description:v}:r)))}</div>
+            </div><div className="mt-4 flex flex-wrap gap-2"><button disabled={busy} onClick={()=>runSave(()=>saveGalleryItem(item,false),'Gallery draft saved.')} className="rounded-full border border-[#D8CEC0] px-4 py-2 text-xs">Save draft</button><button disabled={busy} onClick={()=>runSave(()=>saveGalleryItem(item,true),'Gallery item published.')} className="rounded-full bg-[#1C1511] px-4 py-2 text-xs text-white">Publish</button>{item.id&&<button disabled={busy} onClick={()=>runSave(()=>deleteGalleryItem(item),'Gallery item deleted.')} className="rounded-full border border-red-200 px-4 py-2 text-xs text-red-700">Delete</button>}</div></article>)}</div>
+          </section>}
         </main>
       </div>
     </div>
